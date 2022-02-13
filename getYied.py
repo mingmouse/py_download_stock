@@ -104,12 +104,23 @@ class TWSEYied(BaseFetcher):
         return date.replace('年','/').replace('月','/').replace('日','')
     def formatKey(self,stock_num,date):
         return str(stock_num)+date
+
+    #最新年度有殖利率的股票代碼
     def selectStockNumWhereFlag(self):
         mydb = self.connect()
         with mydb.cursor() as cursor:
              cursor.execute("SELECT stock_id FROM stock_yield where flag= (%s)",(1))
              stock_ids = cursor.fetchall()   
              return stock_ids
+    #所有未確認是否有殖利率的股票代碼
+    def selectStockNumdidntCheck(self):
+      
+        mydb = self.connect()
+        with mydb.cursor() as cursor:
+             cursor.execute("SELECT stock_number.stock_id from stock_number left join stock_yield on stock_yield.stock_id = stock_number.stock_id where stock_yield.stock_id is null")
+             stock_ids = cursor.fetchall()   
+             return stock_ids
+    #所有股票代碼
     def selectStockNum(self):
         mydb = self.connect()
         with mydb.cursor() as cursor:
@@ -121,7 +132,8 @@ class TWSEYied(BaseFetcher):
         TWSE_BASE_URL, 'exchangeReport/BWIBBU')
         _year = 2022
         _month = 1
-        lines = self.selectStockNum()
+        lines = self.selectStockNumdidntCheck()
+        
         for line in lines :
             params = {'date':  '%d%02d01' % (_year, _month) ,'response': 'json','stockNo':line[0] ,'_':''}  
             for retry_i in range(5):
@@ -192,5 +204,6 @@ class TWSEYied(BaseFetcher):
         return [self._make_datatuple(d) for d in original_data['data']]
 
 stock = TWSEYied()
-stock.checkNewYield()
-stock.fetchBWIBBU()
+print(len(stock.selectStockNumdidntCheck()))
+#stock.checkNewYield()
+#stock.fetchBWIBBU()
