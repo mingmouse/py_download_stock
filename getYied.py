@@ -17,7 +17,7 @@ try:
     from json.decoder import JSONDecodeError
 except ImportError:
     JSONDecodeError = ValueError
-
+from decimal import Decimal
 
 TWSE_BASE_URL = 'http://www.twse.com.tw/'
 
@@ -89,11 +89,24 @@ class TWSEYied(BaseFetcher):
                 data[0] = self._convert_date(self.convert_date(data[0]))
                 if len(data) == 4:
                     sql = "REPLACE INTO `stock_daily` (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`) VALUES(%s,%s,%s,%s,%s,%s)"
-                    cursor.execute(sql,(self.formatKey(stock_num,data[0]),stock_num,data[0],data[1],data[2],data[3]))          
+                    cursor.execute(sql,(self.formatKey(stock_num,data[0]),stock_num,data[0],self.convert_data(data[1]),self.convert_data(data[2]),self.convert_data(data[3])))          
                 else :
                     sql = "REPLACE INTO `stock_daily` (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`,`season`) VALUES(%s,%s,%s,%s,%s,%s,%s)"
-                    cursor.execute(sql,(self.formatKey(stock_num,data[0]),stock_num,data[0],data[1],data[3],data[4],data[5]))
-            mydb.commit()   
+                    cursor.execute(sql,(self.formatKey(stock_num,data[0]),stock_num,data[0],self.convert_data(data[1]),self.convert_data(data[3]),self.convert_data(data[4]),data[5]))
+            mydb.commit()  
+    def convert_data(self,data):
+        try :
+            return Decimal(data)
+        except:
+            return 0    
+
+    def checkDateData(self,stock_num,begin_date,end_date):
+        mydb = self.connect()
+        with mydb.cursor() as cursor: 
+            cursor.execute("SELECT count(*) FROM stock_daily where stock_id = (%s) and date > (%s) and date < (%s)",(stock_num,begin_date,end_date))
+            return cursor.fetchone()[0]      
+
+
     def insertCheckFlag(self,stock_num,flag):
         mydb = self.connect()
         with mydb.cursor() as cursor:      
@@ -133,12 +146,13 @@ class TWSEYied(BaseFetcher):
         _year = 2022
         _month = 1
         lines = self.selectStockNumdidntCheck()
-        
+        data_headers = {'UserAgent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36','Content-type': 'application/json', 'Accept': 'text/plain'}
         for line in lines :
+
             params = {'date':  '%d%02d01' % (_year, _month) ,'response': 'json','stockNo':line[0] ,'_':''}  
             for retry_i in range(5):
                 print(params)
-                r = requests.get(REPORT_URL, params=params,
+                r = requests.get(REPORT_URL, params=params, headers=data_headers,
                 proxies=get_proxies())
                             
                 try:
@@ -158,6 +172,7 @@ class TWSEYied(BaseFetcher):
                 self.insertCheckFlag(line[0],1)     
             else :
                 self.insertCheckFlag(line[0],0)
+            time.sleep(5)    
     def fetchBWIBBU(self,retry: int=5):
         year = 2012
         month = 1
@@ -166,31 +181,36 @@ class TWSEYied(BaseFetcher):
         REPORT_URL = urllib.parse.urljoin(
         TWSE_BASE_URL, 'exchangeReport/BWIBBU')
         for line in lines :
-            for _year in range(year,2022):
-                for _month in range(month,12):
-                    params = {'date':  '%d%02d01' % (_year, _month) ,'response': 'json','stockNo':line[0] ,'_':''}
-                    for retry_i in range(retry):
-                        print(params)
-                        r = requests.get(REPORT_URL, params=params,
-                            proxies=get_proxies())
-                            
-                        try:
-                            data = r.json()
-                            print(data)
-                        except JSONDecodeError:
-                            time.sleep(5)
-                            continue
-                        except ConnectionError:
-                            time.sleep(5)
-                            continue
-                        except urllib3.exceptions.MaxRetryError:
-                            time.sleep(5)
-                            continue
-                        else:
-                            break
-                    if data['stat'] == 'OK':
-                        self.insertdialyYield(line[0],data)
-                    time.sleep(5)   
+            for _year in range(year,2023):
+                for _month in range(month,13):
+                    if datetime.datetime.strptime('%d-%02d-01' % (_year, _month),'%Y-%m-%d') > datetime.datetime.today() :
+                        break
+                    if self.checkDateData(line[0],'%d%02d01' % (_year, _month),'%d%02d30' % (_year, _month)) == 0:
+                        params = {'date':  '%d%02d01' % (_year, _month) ,'response': 'json','stockNo':line[0] ,'_':''}
+                        for retry_i in range(retry):
+                            print(params)
+                            r = requests.get(REPORT_URL, params=params,
+                                proxies=get_proxies())
+                                
+                            try:
+                                data = r.json()
+                            except JSONDecodeError:
+                                time.sleep(5)
+                                continue
+                            except ConnectionError:
+                                time.sleep(5)
+                                continue
+                            except urllib3.exceptions.MaxRetryError:
+                                time.sleep(5)
+                                continue
+                            except:
+                                time.sleep(5)
+                                continue
+                            else:
+                                break
+                        if data['stat'] == 'OK':
+                            self.insertdialyYield(line[0],data)
+                        time.sleep(5)   
 
                   
     def fetchStockDay(self):
@@ -206,4 +226,4 @@ class TWSEYied(BaseFetcher):
 stock = TWSEYied()
 print(len(stock.selectStockNumdidntCheck()))
 #stock.checkNewYield()
-#stock.fetchBWIBBU()
+stock.fetchBWIBBU()
