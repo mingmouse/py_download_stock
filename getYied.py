@@ -2,7 +2,6 @@
 from calendar import month
 from io import BufferedWriter
 from msilib.schema import Error
-from mysqlx import IntegrityError
 import requests
 import time
 import datetime
@@ -13,16 +12,18 @@ import codecs
 from twstock.proxy import get_proxies
 import urllib3
 
+from py_download_stock.SqlControl import SqlControl
+
 try:
     from json.decoder import JSONDecodeError
 except ImportError:
     JSONDecodeError = ValueError
 from decimal import Decimal
 
+import pymysql.cursors
 TWSE_BASE_URL = 'http://www.twse.com.tw/'
 
 DATATUPLE = namedtuple('股票殖利率', ['證券代號', '證券名稱', '殖利率', '股利年度', '本益比', '股價淨值比', '財報年'])
-import pymysql.cursors
 
 
 
@@ -46,106 +47,18 @@ class TWSEYied(BaseFetcher):
     #https://www.twse.com.tw/exchangeReport/BWIBBU?response=json&date=20220210&stockNo=1101&_=1644503241062
     #https://www.twse.com.tw/exchangeReport/BWIBBU_d?response=json&date=&selectType=&_=1644410706139
     
-
-    def connect(self):
-                
-        mydb = pymysql.connect(
-            host="localhost",
-            user="root",
-            password="kk412221",
-            database="stock_database"
-        )
-        return mydb
+    sqlControl = SqlControl()
+    
 
     def __init__(self):
         pass
 
-    def insertStocknum(self):
-        mydb = self.connect()
-        with mydb.cursor() as cursor:
-            with  codecs.open('D:\\stock\\twstock\\twstock\\stock_num.txt','r','utf-8') as f:
-                lines = f.readlines()
-                for line in lines:
-                    line = line.replace('\n','')
-                    stock = line.split('\t')
-                    stock_name = stock[0]
-                    stock_num = stock[1].replace('\r','').zfill(4)
-                    sql = "INSERT INTO `stock_number` (`stock_id`, `stock_name`) VALUES (%s, %s)"
-                        
-                    cursor.execute("SELECT COUNT(*) FROM stock_number WHERE stock_id = (%s)",(stock_num))
-                    count = cursor.fetchone()[0]
-                           
-                    if count == 0:
-                        cursor.execute(sql,(stock_num,stock_name))
-                    else :
-                        cursor.execute(sql,(stock_num.zfill(6),stock_name))
-                mydb.commit()   
-                    
-    def insertdialyYield(self,stock_num,datas):
-        #print(datas)
-        mydb = self.connect()
-        with mydb.cursor() as cursor:
-            for data in datas['data']:
-                data[0] = self._convert_date(self.convert_date(data[0]))
-                if len(data) == 4:
-                    sql = "REPLACE INTO `stock_daily` (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`) VALUES(%s,%s,%s,%s,%s,%s)"
-                    cursor.execute(sql,(self.formatKey(stock_num,data[0]),stock_num,data[0],self.convert_data(data[1]),self.convert_data(data[2]),self.convert_data(data[3])))          
-                else :
-                    sql = "REPLACE INTO `stock_daily` (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`,`season`) VALUES(%s,%s,%s,%s,%s,%s,%s)"
-                    cursor.execute(sql,(self.formatKey(stock_num,data[0]),stock_num,data[0],self.convert_data(data[1]),self.convert_data(data[3]),self.convert_data(data[4]),data[5]))
-            mydb.commit()  
-    def convert_data(self,data):
-        try :
-            return Decimal(data)
-        except:
-            return 0    
-
-    def checkDateData(self,stock_num,begin_date,end_date):
-        mydb = self.connect()
-        with mydb.cursor() as cursor: 
-            cursor.execute("SELECT count(*) FROM stock_daily where stock_id = (%s) and date > (%s) and date < (%s)",(stock_num,begin_date,end_date))
-            return cursor.fetchone()[0]      
-
-
-    def insertCheckFlag(self,stock_num,flag):
-        mydb = self.connect()
-        with mydb.cursor() as cursor:      
-            sql = "REPLACE INTO `stock_yield` (`stock_id`,`flag`) VALUES(%s,%s)"
-            cursor.execute(sql,(stock_num,flag))          
-            mydb.commit()           
-    def convert_date(self,date):
-        return date.replace('年','/').replace('月','/').replace('日','')
-    def formatKey(self,stock_num,date):
-        return str(stock_num)+date
-
-    #最新年度有殖利率的股票代碼
-    def selectStockNumWhereFlag(self):
-        mydb = self.connect()
-        with mydb.cursor() as cursor:
-             cursor.execute("SELECT stock_id FROM stock_yield where flag= (%s)",(1))
-             stock_ids = cursor.fetchall()   
-             return stock_ids
-    #所有未確認是否有殖利率的股票代碼
-    def selectStockNumdidntCheck(self):
-      
-        mydb = self.connect()
-        with mydb.cursor() as cursor:
-             cursor.execute("SELECT stock_number.stock_id from stock_number left join stock_yield on stock_yield.stock_id = stock_number.stock_id where stock_yield.stock_id is null")
-             stock_ids = cursor.fetchall()   
-             return stock_ids
-    #所有股票代碼
-    def selectStockNum(self):
-        mydb = self.connect()
-        with mydb.cursor() as cursor:
-             cursor.execute("SELECT stock_id FROM stock_number")
-             stock_ids = cursor.fetchall()   
-             return stock_ids
     def checkNewYield(self):
         REPORT_URL = urllib.parse.urljoin(
         TWSE_BASE_URL, 'exchangeReport/BWIBBU')
         _year = 2022
         _month = 1
-        lines = self.selectStockNumdidntCheck()
+        lines = self.sqlControl.selectStockNumdidntCheck()
         data_headers = {'UserAgent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36','Content-type': 'application/json', 'Accept': 'text/plain'}
         for line in lines :
 
@@ -169,15 +82,15 @@ class TWSEYied(BaseFetcher):
                 else:
                     break   
             if data['stat'] == 'OK':
-                self.insertCheckFlag(line[0],1)     
+                self.sqlControl.insertCheckFlag(line[0],1)     
             else :
-                self.insertCheckFlag(line[0],0)
+                self.sqlControl.insertCheckFlag(line[0],0)
             time.sleep(5)    
     def fetchBWIBBU(self,retry: int=5):
         year = 2012
         month = 1
         #with open('D:\\stock\\twstock\\twstock\\stock_num.txt') as f:
-        lines = self.selectStockNumWhereFlag()
+        lines = self.sqlControl.selectStockNumWhereFlag()
         REPORT_URL = urllib.parse.urljoin(
         TWSE_BASE_URL, 'exchangeReport/BWIBBU')
         for line in lines :
@@ -185,7 +98,7 @@ class TWSEYied(BaseFetcher):
                 for _month in range(month,13):
                     if datetime.datetime.strptime('%d-%02d-01' % (_year, _month),'%Y-%m-%d') > datetime.datetime.today() :
                         break
-                    if self.checkDateData(line[0],'%d%02d01' % (_year, _month),'%d%02d30' % (_year, _month)) == 0:
+                    if self.sqlControl.checkDateData(line[0],'%d%02d01' % (_year, _month),'%d%02d30' % (_year, _month)) == 0:
                         params = {'date':  '%d%02d01' % (_year, _month) ,'response': 'json','stockNo':line[0] ,'_':''}
                         for retry_i in range(retry):
                             print(params)
@@ -209,7 +122,7 @@ class TWSEYied(BaseFetcher):
                             else:
                                 break
                         if data['stat'] == 'OK':
-                            self.insertdialyYield(line[0],data)
+                            self.sqlControl.insertdialyYield(line[0],data)
                         time.sleep(5)   
 
                   
@@ -224,6 +137,7 @@ class TWSEYied(BaseFetcher):
         return [self._make_datatuple(d) for d in original_data['data']]
 
 stock = TWSEYied()
-print(len(stock.selectStockNumdidntCheck()))
+sqlControl = SqlControl()
+print(len(sqlControl.selectStockNumdidntCheck()))
 #stock.checkNewYield()
 stock.fetchBWIBBU()
