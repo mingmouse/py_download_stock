@@ -12,7 +12,7 @@ import codecs
 from twstock.proxy import get_proxies
 import urllib3
 
-from py_download_stock.SqlControl import SqlControl
+from SqlControl import SqlControl
 
 try:
     from json.decoder import JSONDecodeError
@@ -52,7 +52,7 @@ class TWSEYied(BaseFetcher):
 
     def __init__(self):
         pass
-
+    #檢查是否有最新殖利率
     def checkNewYield(self):
         REPORT_URL = urllib.parse.urljoin(
         TWSE_BASE_URL, 'exchangeReport/BWIBBU')
@@ -91,6 +91,7 @@ class TWSEYied(BaseFetcher):
         month = 1
         #with open('D:\\stock\\twstock\\twstock\\stock_num.txt') as f:
         lines = self.sqlControl.selectStockNumWhereFlag()
+        
         REPORT_URL = urllib.parse.urljoin(
         TWSE_BASE_URL, 'exchangeReport/BWIBBU')
         for line in lines :
@@ -102,10 +103,48 @@ class TWSEYied(BaseFetcher):
                         params = {'date':  '%d%02d01' % (_year, _month) ,'response': 'json','stockNo':line[0] ,'_':''}
                         for retry_i in range(retry):
                             print(params)
-                            r = requests.get(REPORT_URL, params=params,
-                                proxies=get_proxies())
-                                
                             try:
+                                r = requests.get(REPORT_URL, params=params,
+                                    proxies=get_proxies())
+                                data = r.json()
+                            except JSONDecodeError:
+                                time.sleep(5)
+                                continue
+                            except ConnectionError:
+                                time.sleep(5)
+                                continue
+                            except urllib3.exceptions.MaxRetryError:
+                                time.sleep(5)
+                                continue
+                            except:
+                                time.sleep(5)
+                                continue
+                            else:
+                                break
+                        if data['stat'] == 'OK':
+                            self.sqlControl.insertdialyYield(line[0],data)
+                        time.sleep(5) 
+    #本月與其他月份數據不同                      
+    def fetchLostMonthBWIBBU(self,retry: int=5):
+        year = 2012
+        month = 1
+        #with open('D:\\stock\\twstock\\twstock\\stock_num.txt') as f:
+        lines = self.sqlControl.selectStockNumWhereFlag()
+        
+        REPORT_URL = urllib.parse.urljoin(
+        TWSE_BASE_URL, 'exchangeReport/BWIBBU')
+        for line in lines :
+            for _year in range(year,2023):
+                for _month in range(month,13):
+                    if datetime.datetime.strptime('%d-%02d-01' % (_year, _month),'%Y-%m-%d') > datetime.datetime.today() :
+                        break
+                    if self.sqlControl.getCountWithoutYield(line[0],'%d%02d01' % (_year, _month),'%d%02d30' % (_year, _month)) :
+                        params = {'date':  '%d%02d01' % (_year, _month) ,'response': 'json','stockNo':line[0] ,'_':''}
+                        for retry_i in range(retry):
+                            print(params)
+                            try:
+                                r = requests.get(REPORT_URL, params=params,
+                                    proxies=get_proxies())
                                 data = r.json()
                             except JSONDecodeError:
                                 time.sleep(5)
@@ -138,6 +177,10 @@ class TWSEYied(BaseFetcher):
 
 stock = TWSEYied()
 sqlControl = SqlControl()
-print(len(sqlControl.selectStockNumdidntCheck()))
+#print(len(sqlControl.selectStockNumdidntCheck()))
 #stock.checkNewYield()
-stock.fetchBWIBBU()
+while True :
+    stock.fetchLostMonthBWIBBU()
+    stock.fetchBWIBBU()
+    
+#print(sqlControl.getCountWithoutYield('2015-07-01','2015-07-30'))
