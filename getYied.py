@@ -41,6 +41,19 @@ class BaseFetcher(object):
 
     def purify(self, original_data):
         pass
+class InsertData(object):
+    type = 0
+    def insert(self):
+        pass
+class InserYied(InsertData):
+    type = 0
+    def insert(self):
+        
+        pass
+class InsertDaily(InsertData):
+    type = 1
+    def insert(self):
+        pass
 
 class TWSEYied(BaseFetcher):
     #https://www.twse.com.tw/exchangeReport/BWIBBU_d?response=json&date=20220105&selectType=01
@@ -124,21 +137,20 @@ class TWSEYied(BaseFetcher):
                         if data['stat'] == 'OK':
                             self.sqlControl.insertdialyYield(line[0],data)
                         time.sleep(5) 
-    #本月與其他月份數據不同                      
-    def fetchLostMonthBWIBBU(self,retry: int=5):
+    
+    def fetchStockDay(self):
+        REPORT_URL = urllib.parse.urljoin(
+            TWSE_BASE_URL, 'exchangeReport/STOCK_DAY')     
         year = 2012
         month = 1
         #with open('D:\\stock\\twstock\\twstock\\stock_num.txt') as f:
         lines = self.sqlControl.selectStockNumWhereFlag()
-        
-        REPORT_URL = urllib.parse.urljoin(
-        TWSE_BASE_URL, 'exchangeReport/BWIBBU')
         for line in lines :
             for _year in range(year,2023):
                 for _month in range(month,13):
                     if datetime.datetime.strptime('%d-%02d-01' % (_year, _month),'%Y-%m-%d') > datetime.datetime.today() :
                         break
-                    if self.sqlControl.getCountWithoutYield(line[0],'%d%02d01' % (_year, _month),'%d%02d30' % (_year, _month)) :
+                    if self.sqlControl.checkDateData(line[0],'%d%02d01' % (_year, _month),'%d%02d30' % (_year, _month)) == 0:
                         params = {'date':  '%d%02d01' % (_year, _month) ,'response': 'json','stockNo':line[0] ,'_':''}
                         for retry_i in range(retry):
                             print(params)
@@ -162,12 +174,7 @@ class TWSEYied(BaseFetcher):
                                 break
                         if data['stat'] == 'OK':
                             self.sqlControl.insertdialyYield(line[0],data)
-                        time.sleep(5)   
-
-                  
-    def fetchStockDay(self):
-        REPORT_URL = urllib.parse.urljoin(
-            TWSE_BASE_URL, 'exchangeReport/STOCK_DAY')     
+                        time.sleep(5) 
                        
     def _make_datatuple(self, data):
         return DATATUPLE(*data)
@@ -175,12 +182,12 @@ class TWSEYied(BaseFetcher):
     def purify(self, original_data):
         return [self._make_datatuple(d) for d in original_data['data']]
 
+   
 stock = TWSEYied()
 sqlControl = SqlControl()
 #print(len(sqlControl.selectStockNumdidntCheck()))
 #stock.checkNewYield()
 while True :
-    stock.fetchLostMonthBWIBBU()
     stock.fetchBWIBBU()
     
 #print(sqlControl.getCountWithoutYield('2015-07-01','2015-07-30'))

@@ -38,7 +38,7 @@ class SqlControl(object):
     def insertCheckFlag(self,stock_num,flag):
         mydb = self.connect()
         with mydb.cursor() as cursor:      
-            sql = "REPLACE INTO `stock_yield` (`stock_id`,`flag`) VALUES(%s,%s)"
+            sql = "REPLACE INTO `stock_states` (`stock_id`,`flag`) VALUES(%s,%s)"
             cursor.execute(sql,(stock_num,flag))          
             mydb.commit()    
 
@@ -95,36 +95,7 @@ class SqlControl(object):
         with mydb.cursor() as cursor: 
             cursor.execute("SELECT count(*) FROM stock_daily where stock_id = (%s) and date > (%s) and date < (%s)",(stock_num,begin_date,end_date))
             return cursor.fetchone()[0]  
-    #該年月數據與其他數據不相同
-    def getCountWithoutYield(self,_stock,begin_date,end_date):
-        data = []
-        mydb = self.connect()
-        stocks = self.selectStockNumWhereFlag()
-        with mydb.cursor() as cursor: 
-            for stock_num in stocks:
-                cursor.execute("SELECT count(*) FROM stock_daily where stock_id = (%s) and date > (%s) and date < (%s)",(stock_num[0],begin_date,end_date))
-                count = cursor.fetchone()[0]
-                find = False
-                if count != 0:
-                    for index in range(len(data)):
-                        if data[index]['count'] == count:
-                            data[index]['stock_num'].append(stock_num[0])
-                            find = True
-                            break
-                    if find == False:
-                        
-                        data.append({
-                            'count':count,'stock_num':[stock_num[0]]
-                        })
-        max = 0
-        for index in range(len(data)):
-            if data[max]['count'] < data[index]['count'] :
-                max = index
-        data.pop(max)  
-        for d in data:
-            if d['stock_num'] == _stock :
-                return True
-        return False
+   
 
 
            
@@ -136,7 +107,7 @@ class SqlControl(object):
             return self.stock_ids
         mydb = self.connect()
         with mydb.cursor() as cursor:
-             cursor.execute("SELECT stock_id FROM stock_yield where flag= (%s)",(1))
+             cursor.execute("SELECT stock_id FROM stock_states where flag= (%s)",(1))
              stock_ids = cursor.fetchall()   
              return stock_ids
     #所有未確認是否有殖利率的股票代碼
@@ -144,7 +115,7 @@ class SqlControl(object):
       
         mydb = self.connect()
         with mydb.cursor() as cursor:
-             cursor.execute("SELECT stock_number.stock_id from stock_number left join stock_yield on stock_yield.stock_id = stock_number.stock_id where stock_yield.stock_id is null")
+             cursor.execute("SELECT stock_number.stock_id from stock_number left join stock_states on stock_states.stock_id = stock_number.stock_id where stock_states.stock_id is null")
              stock_ids = cursor.fetchall()   
              return stock_ids
     #所有股票代碼
