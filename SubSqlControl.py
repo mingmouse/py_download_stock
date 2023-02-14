@@ -20,11 +20,26 @@ from decimal import Decimal
 
 import pymysql.cursors
 
-class SqlControl(object):
+class SubSqlControl(object):
 
     def _convert_date(self, date):
         """Convert '106/05/01' to '2017/05/01'"""
         return '/'.join([str(int(date.split('/')[0]) + 1911)] + date.split('/')[1:])
+
+    def convert_data(self,data):
+        try :
+            return Decimal(data)
+        except:
+            return 0    
+    def convert_date(self,date):
+        return date.replace('年','/').replace('月','/').replace('日','')
+    def convert_vol(self,vol):
+        try :
+            return Decimal(vol.replace(',',''))
+        except:
+            return 0  
+    def formatKey(self,stock_num,date):
+        return str(stock_num)+date
 
     def connect(self):
                 
@@ -35,6 +50,7 @@ class SqlControl(object):
             database="stock_database"
         )
         return mydb
+
     def insertCheckFlag(self,stock_num,flag):
         mydb = self.connect()
         with mydb.cursor() as cursor:      
@@ -66,19 +82,23 @@ class SqlControl(object):
     def insertdialyYield(self,stock_num,datas):
         #print(datas)
         mydb = self.connect()
+        sql = "REPLACE INTO `stock_daily_%s`"%stock_num 
         try:
             with mydb.cursor() as cursor:
                 for data in datas['data']:
                     data[0] = self._convert_date(self.convert_date(data[0]))
                     if len(data) == 4:
-                        sql = "REPLACE INTO `stock_daily` (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`) VALUES(%s,%s,%s,%s,%s,%s)"
-                        cursor.execute(sql,(self.formatKey(stock_num,data[0]),stock_num,data[0],self.convert_data(data[1]),self.convert_data(data[2]),self.convert_data(data[3])))          
+                        conditional = " (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`) VALUES('%s','%s','%s',%s,%s,%s)",(self.formatKey(stock_num,data[0]),stock_num,data[0],self.convert_data(data[1]),self.convert_data(data[2]),self.convert_data(data[3]))
+                        print("%s%s"%(sql,conditional))
+                        cursor.execute("%s%s"%(sql,conditional))           
                     else :
-                        sql = "REPLACE INTO `stock_daily` (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`,`season`) VALUES(%s,%s,%s,%s,%s,%s,%s)"
-                        cursor.execute(sql,(self.formatKey(stock_num,data[0]),stock_num,data[0],self.convert_data(data[1]),self.convert_data(data[3]),self.convert_data(data[4]),data[5]))
+                        conditional = " (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`,`season`) VALUES('%s','%s','%s',%s,%s,%s,%s)",(self.formatKey(stock_num,data[0]),stock_num,data[0],self.convert_data(data[1]),self.convert_data(data[3]),self.convert_data(data[4]),data[5])
+                        print("%s%s"%(sql,conditional))
+                        cursor.execute("%s%s"%(sql,conditional))         
                 mydb.commit()  
-        except:
-           return 
+        except Exception as e: 
+            print(e)
+            return 
     # 0: "日期"
     # 1: "成交股數" vol
     # 2: "成交金額"volnum
@@ -95,43 +115,42 @@ class SqlControl(object):
             with mydb.cursor() as cursor:
                 for data in datas['data']:
                     data[0] = self._convert_date(self.convert_date(data[0]))
-                    sql = "REPLACE INTO `stock_daily_data` (`stock_id_date`,`stock_id`,`date`,`close_price`,`open_price`,`max_price`,`min_price`,`volnum`,`vol`,`vol_x`) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
-                  
-                    cursor.execute(sql
-                        ,(self.formatKey(stock_num,data[0])
-                        ,stock_num,data[0]
+                    sql = "REPLACE INTO `stock_daily_data_%s`" % stock_num
+                    conditional = " (`stock_id_date`,`stock_id`,`date`,`close_price`,`open_price`,`max_price`,`min_price`,`volnum`,`vol`,`vol_x`) VALUES('{0}','{1}','{2}',{3},{4},{5},{6},{7},{8},{9})".format(
+                        self.formatKey(stock_num,data[0])
+                        ,stock_num
+                        ,data[0]
                         ,self.convert_data(data[6])
                         ,self.convert_data(data[3])
                         ,self.convert_data(data[4])
                         ,self.convert_data(data[5])
                         ,self.convert_vol(data[2])
                         ,self.convert_vol(data[1])
-                        ,self.convert_vol(data[8])))                              
+                        ,self.convert_vol(data[8]))
+                    print("%s%s"%(sql,conditional))
+                    cursor.execute("%s%s"%(sql,conditional))                              
                 mydb.commit()  
-        except:
-           return 
-    def convert_data(self,data):
-        try :
-            return Decimal(data)
-        except:
-            return 0    
-    def convert_date(self,date):
-        return date.replace('年','/').replace('月','/').replace('日','')
-    def convert_vol(self,vol):
-        try :
-            return Decimal(vol.replace(',',''))
-        except:
-            return 0  
-    def formatKey(self,stock_num,date):
-        return str(stock_num)+date
+        except Exception as e: 
+            print(e)
+            return 
+    
         
     def checkDateData(self,mode,stock_num,begin_date,end_date):
         mydb = self.connect()
         with mydb.cursor() as cursor: 
             if(mode == 0) :
-                cursor.execute("SELECT count(*) FROM stock_daily where stock_id = (%s) and date > (%s) and date < (%s)",(stock_num,begin_date,end_date))
+                sql = "SELECT count(*) FROM stock_daily_%s"%stock_num
+                conditional = " where stock_id = '{0}' and date > '{1}' and date < '{2}'".format(stock_num,begin_date,end_date)
+                print("%s%s"%(sql,conditional))
+                #print("SELECT count(*) FROM stock_daily where stock_id = (%s) and date > (%s) and date < (%s)",(stock_num,begin_date,end_date))
+                cursor.execute("%s%s"%(sql,conditional))
             else :
-                cursor.execute("SELECT count(*) FROM stock_daily_data where stock_id = (%s) and date > (%s) and date < (%s)",(stock_num,begin_date,end_date))
+                sql = "SELECT count(*) FROM stock_daily_data_%s"%stock_num
+                conditional = " where stock_id = '{0}' and date > '{1}' and date < '{2}'".format(stock_num,begin_date,end_date)
+                #print()
+                print("%s%s"%(sql,conditional))
+                #print("SELECT count(*) FROM stock_daily_data where stock_id = (%s) and date > (%s) and date < (%s)",(stock_num,begin_date,end_date))
+                cursor.execute("%s%s"%(sql,conditional))
             return cursor.fetchone()[0]  
    
         
@@ -205,7 +224,7 @@ class SqlControl(object):
             mydb.commit()  
         return 0    
 
-    def syncDataToSplitTable(self):
+    def createSplitTable(self):
         #取得所有的股票id
         #從舊表取出數據 done 
         #創建新表(如果新表不存在) done 
@@ -213,77 +232,13 @@ class SqlControl(object):
         #將舊表數據同步至新表 
 
         lines = self.selectStockNum()
-        # for line in lines :
-        #    line = line[0]
-        #    self.createDailyTableByStockNumber(line)
-        #    self.createTableByStockNumber(line)
-        #    print("done create table %s" % line)
-        for line in lines:
-            data =  self.selectDaliyTable(line)
-            for _data in data:
-                self.syncDataToTalbe(line,_data)
-            data = self.selectDaliyData(line)     
-            for _data in data:
-                self.syncDataTodaily(line,_data)   
-            print("done sync data %s" % line)        
+        for line in lines :
+           line = line[0]
+           self.createDailyTableByStockNumber(line)
+           self.createTableByStockNumber(line)
+           print("done create table %s" % line)
+        
         return 0
 
-    def selectDaliyData(self,stock_number):
-        mydb = self.connect()
-        with mydb.cursor() as cursor: 
-            sql = "SELECT * FROM stock_daily where stock_id= '%s'"% stock_number
-            print(sql)
-            cursor.execute(sql ) 
-            return cursor.fetchall()
 
-
-    def selectDaliyTable(self,stock_number):
-        mydb = self.connect()
-        with mydb.cursor() as cursor: 
-            sql = "SELECT * FROM stock_daily_data where stock_id = '%s'"% stock_number 
-            print(sql)
-            cursor.execute(sql)    
-            return cursor.fetchall() 
-
-    def syncDataToTalbe(self,stock_number,datas):
-        sql = "REPLACE INTO `stock_daily_data_'%s'"%  stock_number 
-        sql = sql % " (`stock_id_date`,`stock_id`,`date`,`close_price`,`open_price`,`max_price`,`min_price`,`volnum`,`vol`,`vol_x`) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
-       
-        print(sql)
-        mydb = self.connect()
-        try:
-            with mydb.cursor() as cursor:
-               
-                print(sql , (datas[0],datas[1],datas[2],self.convert_data(datas[3]),self.convert_data(datas[4]),self.convert_data(datas[5])
-                ,self.convert_data(datas[6]),self.convert_vol(datas[7]),self.convert_vol(datas[8]),self.convert_vol(datas[9])))
-                #cursor.execute(sql , (datas[0],datas[1],datas[2],self.convert_data(datas[3]),self.convert_data(datas[4]),self.convert_data(datas[5])
-                #,self.convert_data(datas[6]),self.convert_vol(datas[7]),self.convert_vol(datas[8]),self.convert_vol(datas[9])))
-                                                
-                mydb.commit()  
-        except Exception as e: 
-            print(e)
-        return 
-
-    def syncDataTodaily(self,stock_number,datas):
-        mydb = self.connect()
-        sql = "REPLACE INTO `stock_daily_'%s'"%  stock_number 
-        print(sql)
-        try:
-            with mydb.cursor() as cursor:
-                if datas[6]:
-                    
-                    sql = sql % " (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`,`season`) VALUES(%s,%s,%s,%s,%s,%s,%s)"
-                    print(sql,(datas[0],datas[1],datas[2],self.convert_data(datas[3]),self.convert_data(datas[4]),self.convert_data(datas[5]),datas[6]))
-
-                    cursor.execute(sql ,(datas[0],datas[1],datas[2],self.convert_data(datas[3]),self.convert_data(datas[4]),self.convert_data(datas[5]),datas[6]))
-                else :
-                    sql = sql % " (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`) VALUES(%s,%s,%s,%s,%s,%s)"  
-                    print(sql , (datas[0],datas[1],datas[2],self.convert_data(datas[3]),self.convert_data(datas[4]),self.convert_data(datas[5])))
-                    cursor.execute(sql , (datas[0],datas[1],datas[2],self.convert_data(datas[3]),self.convert_data(datas[4]),self.convert_data(datas[5])))      
-                    
-                mydb.commit()  
-        except Exception as e: 
-            print(e)
-
-        return 
 
