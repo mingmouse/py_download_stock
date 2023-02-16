@@ -223,12 +223,3 @@ class TWSEYied(BaseFetcher):
         return [self._make_datatuple(d) for d in original_data['data']]
 
    
-stock = TWSEYied()
-sqlControl = SubSqlControl()
-#sqlControl.syncDataToSplitTable()
-print(len(sqlControl.selectStockNumdidntCheck()))
-#stock.checkNewYield()
-while True :
-    stock.fetchStockDay()
-    stock.fetchBWIBBU()
-#print(sqlControl.getCountWithoutYield('2015-07-01','2015-07-30'))
