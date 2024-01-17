@@ -71,10 +71,10 @@ class SqlControl(object):
                 for data in datas['data']:
                     data[0] = self._convert_date(self.convert_date(data[0]))
                     if len(data) == 4:
-                        sql = "REPLACE INTO `stock_daily` (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`) VALUES(%s,%s,%s,%s,%s,%s)"
+                        sql = "INSERT INTO `stock_daily` (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`) VALUES(%s,%s,%s,%s,%s,%s)"
                         cursor.execute(sql,(self.formatKey(stock_num,data[0]),stock_num,data[0],self.convert_data(data[1]),self.convert_data(data[2]),self.convert_data(data[3])))          
                     else :
-                        sql = "REPLACE INTO `stock_daily` (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`,`season`) VALUES(%s,%s,%s,%s,%s,%s,%s)"
+                        sql = "INSERT INTO `stock_daily` (`stock_id_date`,`stock_id`,`date`,`yield`,`pe`,`value`,`season`) VALUES(%s,%s,%s,%s,%s,%s,%s)"
                         cursor.execute(sql,(self.formatKey(stock_num,data[0]),stock_num,data[0],self.convert_data(data[1]),self.convert_data(data[3]),self.convert_data(data[4]),data[5]))
                 mydb.commit()  
         except:
@@ -95,11 +95,13 @@ class SqlControl(object):
             with mydb.cursor() as cursor:
                 for data in datas['data']:
                     data[0] = self._convert_date(self.convert_date(data[0]))
-                    sql = "REPLACE INTO `stock_daily_data` (`stock_id_date`,`stock_id`,`date`,`close_price`,`open_price`,`max_price`,`min_price`,`volnum`,`vol`,`vol_x`) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
+
+                    sql = "INSERT INTO `stock_daily_data` (`stock_id_date`,`stock_id`,`date`,`close_price`,`open_price`,`max_price`,`min_price`,`volnum`,`vol`,`vol_x`) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
                   
                     cursor.execute(sql
                         ,(self.formatKey(stock_num,data[0])
-                        ,stock_num,data[0]
+                        ,stock_num
+                        ,data[0]
                         ,self.convert_data(data[6])
                         ,self.convert_data(data[3])
                         ,self.convert_data(data[4])
@@ -110,6 +112,7 @@ class SqlControl(object):
                 mydb.commit()  
         except:
            return 
+    
     def convert_data(self,data):
         try :
             return Decimal(data)
@@ -213,11 +216,11 @@ class SqlControl(object):
         #將舊表數據同步至新表 
 
         lines = self.selectStockNum()
-        # for line in lines :
-        #    line = line[0]
-        #    self.createDailyTableByStockNumber(line)
-        #    self.createTableByStockNumber(line)
-        #    print("done create table %s" % line)
+        for line in lines :
+            line = line[0]
+            self.createDailyTableByStockNumber(line)
+            self.createTableByStockNumber(line)
+            print("done create table %s" % line)
         for line in lines:
             data =  self.selectDaliyTable(line)
             for _data in data:
@@ -233,7 +236,7 @@ class SqlControl(object):
         with mydb.cursor() as cursor: 
             sql = "SELECT * FROM stock_daily where stock_id= '%s'"% stock_number
             print(sql)
-            cursor.execute(sql ) 
+            cursor.execute(sql) 
             return cursor.fetchall()
 
 

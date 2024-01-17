@@ -216,6 +216,10 @@ class TWSEYied(BaseFetcher):
                 for _month in range(month,13):
                     if datetime.datetime.strptime('%d-%02d-01' % (_year, _month),'%Y-%m-%d') > datetime.datetime.today() :
                         break
+
+    def create(self):
+        self.sqlControl.syncDataToSplitTable()
+
     def _make_datatuple(self, data):
         return DATATUPLE(*data)
 
